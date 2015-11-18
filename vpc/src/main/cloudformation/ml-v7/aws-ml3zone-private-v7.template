@@ -1,0 +1,790 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create a single az, load balanced, MarkLogic System. MarkLogic-7.0-1.x86_64.rpm",
+  "Parameters": {
+    "AMI": {
+      "Description": "Base AMI of MarkLogic installation",
+      "Type": "String",
+      "Default": "ami-9c7b9eaf"
+    },
+    "AdminUser": {
+      "Description": "The MarkLogic Administrator Username",
+      "Type": "String"
+    },
+    "AdminPass": {
+      "Description": "The MarkLogic Administrator Password",
+      "Type": "String",
+      "NoEcho": "TRUE"
+    },
+    "Deployment": {
+      "Type": "String",
+      "Description": "Deployment version (increment to force cfn-hup update)",
+      "Default": "0"
+    },
+    "Licensee": {
+      "Description": "The MarkLogic Licensee",
+      "Type": "String",
+      "Default": "none"
+    },
+    "LicenseKey": {
+      "Description": "The MarkLogic License Key",
+      "Type": "String",
+      "Default": "none"
+    },
+    "InstanceType": {
+      "Description": "Type of EC2 instance to launch",
+      "Type": "String",
+      "Default": "c3.large",
+      "AllowedValues": [
+       "c3.2xlarge","c3.4xlarge","c3.8xlarge","c3.large","c3.xlarge","c4.2xlarge","c4.4xlarge","c4.8xlarge","c4.large","c4.xlarge","cc2.8xlarge","cr1.8xlarge","d2.2xlarge","d2.4xlarge","d2.8xlarge","d2.xlarge","g2.2xlarge","hi1.4xlarge","hs1.8xlarge","i2.2xlarge","i2.4xlarge","i2.8xlarge","i2.xlarge","m1.large","m1.medium","m1.small","m1.xlarge","m2.2xlarge","m2.4xlarge","m2.xlarge","m3.2xlarge","m3.large","m3.medium","m3.xlarge","m4.10xlarge","m4.2xlarge","m4.4xlarge","m4.large","m4.xlarge","r3.2xlarge","r3.4xlarge","r3.8xlarge","r3.large","r3.xlarge","t1.micro","t2.large","t2.medium","t2.micro","t2.small"
+      ]
+    },
+    "IAMRole": {
+      "Description": "IAM Role",
+      "Type": "String"
+    },
+    "KeyName": {
+      "Description": "The EC2 Key Pair to allow SSH access to the instances",
+      "Type": "String"
+    },
+    "VPC": {
+      "Description": "The VPC ID",
+      "Type": "String"
+    },
+    "PublicSubnets": {
+      "Description": "The Subnet IDs",
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "PrivateSubnets": {
+      "Description": "The Private Subnets",
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "Zones": {
+      "Description": "The AZ Zones",
+      "Type": "List<AWS::EC2::AvailabilityZone::Name>"
+    },
+    "VolumeSize": {
+      "Description": "The initial EBS volume size (GB) per node",
+      "Type": "Number",
+      "MinValue": "10",
+      "MaxValue": "1000",
+      "Default": "10"
+    },
+    "VolumeType": {
+      "Description": "The EBS Data volume Type",
+      "Type": "String",
+      "AllowedValues": [
+        "standard",
+        "gp2"
+      ],
+      "Default": "gp2"
+    },
+    "NodesPerZone": {
+      "Description": "Nodes per AZ Zone.  Set to 1 or more to initialize, 0 to shutdown",
+      "Type": "Number",
+      "MinValue": "0",
+      "MaxValue": "100",
+      "Default": "1"
+    },
+    "LogSNS": {
+      "Description": "SNS Topic for logging",
+      "Type": "String",
+      "Default": "none"
+    },
+    "ELBIdleTimeout" : {
+      "Type" : "Number",
+      "Description" : "The ELB Idle timeout in seconds [default 60 seconds]",
+      "Default" : 60 ,
+      "MinValue" : 1 ,
+      "MaxValue"  : 3600 
+    }
+  },
+  "Conditions": {"UseLogSNS": {"Fn::Not": [{"Fn::Equals": [
+    {"Ref": "LogSNS"},
+    "none"
+  ]}]}},
+  "Resources": {
+    "MarklogicVolume1": {
+      "Type": "AWS::EC2::Volume",
+      "Properties": {
+        "AvailabilityZone": {"Fn::Select": [
+          "0",
+          {"Ref": "Zones"}
+        ]},
+        "Size": {"Ref": "VolumeSize"},
+        "Tags": [{
+          "Key": "Name",
+          "Value": "MarkLogicData 1"
+        }],
+        "VolumeType": {"Ref": "VolumeType"}
+      }
+    },
+    "MarklogicVolume2": {
+      "Type": "AWS::EC2::Volume",
+      "Properties": {
+        "AvailabilityZone": {"Fn::Select": [
+          "1",
+          {"Ref": "Zones"}
+        ]},
+        "Size": {"Ref": "VolumeSize"},
+        "Tags": [{
+          "Key": "Name",
+          "Value": "MarkLogicData 2"
+        }],
+        "VolumeType": {"Ref": "VolumeType"}
+      }
+    },
+    "MarklogicVolume3": {
+      "Type": "AWS::EC2::Volume",
+      "Properties": {
+        "AvailabilityZone": {"Fn::Select": [
+          "2",
+          {"Ref": "Zones"}
+        ]},
+        "Size": {"Ref": "VolumeSize"},
+        "Tags": [{
+          "Key": "Name",
+          "Value": "MarkLogicData 3"
+        }],
+        "VolumeType": {"Ref": "VolumeType"}
+      }
+    },
+    "MarkLogicSDBDomain": {
+      "Type": "AWS::SDB::Domain",
+      "Properties": {"Description": "Simple DB auto-created and used as cluster name"}
+    },
+    "ZoneAutoScalingGroup1": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "AvailabilityZones": [{"Fn::Select": [
+          "0",
+          {"Ref": "Zones"}
+        ]}],
+        "VPCZoneIdentifier": [{"Fn::Select": [
+          "0",
+          {"Ref": "PrivateSubnets"}
+        ]}],
+        "LaunchConfigurationName": {"Ref": "LaunchConfig1"},
+        "MinSize": {"Ref": "NodesPerZone"},
+        "MaxSize": {"Ref": "NodesPerZone"},
+        "DesiredCapacity": {"Ref": "NodesPerZone"},
+        "Cooldown": "300",
+        "HealthCheckType": "EC2",
+        "HealthCheckGracePeriod": "300",
+        "LoadBalancerNames": [{"Ref": "ElasticLoadBalancer"}],
+        "NotificationConfiguration": {"Fn::If": [
+          "UseLogSNS",
+          {
+            "TopicARN": {"Ref": "LogSNS"},
+            "NotificationTypes": [
+              "autoscaling:EC2_INSTANCE_LAUNCH",
+              "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+              "autoscaling:EC2_INSTANCE_TERMINATE",
+              "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+            ]
+          },
+          {"Ref": "AWS::NoValue"}
+        ]},
+        "Tags": [{
+          "Key": "ASGInstance",
+          "Value": "ASG1",
+          "PropagateAtLaunch": true
+        }]
+      },
+      "Metadata": {
+        "MarkLogic::MetaDataVersion": "2015-07-17-14:49:23",
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "default": [
+              {"ConfigSet": "bootstrap"},
+              {"ConfigSet": "update"}
+            ],
+            "bootstrap": ["config_bootstrap"],
+            "update": ["config_update"]
+          },
+          "config_bootstrap": {
+            "packages": {"yum": {
+              "aws-cli": [],
+              "rsyslog": [],
+              "yum-utils": []
+            }},
+            "commands": {},
+            "services": {"sysvinit": {"MarkLogic": {
+              "enabled": "true",
+              "ensureRunning": "false"
+            }}}
+          },
+          "config_update": {
+            "files": {"/etc/marklogic.conf": {
+              "content": {"Fn::Join": [
+                "",
+                [
+                  "export MARKLOGIC_CLUSTER_NAME=",
+                  {"Ref": "MarkLogicSDBDomain"},
+                  "\n",
+                  "export MARKLOGIC_EBS_VOLUME=",
+                  {"Ref": "MarklogicVolume1"},
+                  ",",
+                  {"Ref": "VolumeSize"},
+                  ",*\n",
+                  "export MARKLOGIC_NODE_NAME=NodeA#\n",
+                  "export MARKLOGIC_ADMIN_USERNAME=",
+                  {"Ref": "AdminUser"},
+                  "\n",
+                  "export MARKLOGIC_ADMIN_PASSWORD=",
+                  {"Ref": "AdminPass"},
+                  "\n",
+                  "export MARKLOGIC_CLUSTER_MASTER=1\n",
+                  "export MARKLOGIC_LICENSEE=",
+                  {"Ref": "Licensee"},
+                  "\n",
+                  "export MARKLOGIC_LICENSE_KEY=",
+                  {"Ref": "LicenseKey"},
+                  "\n",
+                  {"Fn::If": [
+                    "UseLogSNS",
+                    {"Fn::Join": [
+                      "",
+                      [
+                        "export MARKLOGIC_LOG_SNS=",
+                        {"Ref": "LogSNS"},
+                        "\n"
+                      ]
+                    ]},
+                    ""
+                  ]}
+                ]
+              ]},
+              "mode": "000444",
+              "owner": "root",
+              "group": "root"
+            }},
+            "services": {"sysvinit": {"MarkLogic": {
+              "enabled": "true",
+              "ensureRunning": "true",
+              "files": [
+                "/etc/marklogic.conf",
+                "/etc/sysconfig/MarkLogic"
+              ],
+              "packages": [{"yum": [
+                "MarkLogic",
+                "java"
+              ]}]
+            }}}
+          }
+        }
+      }
+    },
+    "ZoneAutoScalingGroup2": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "AvailabilityZones": [{"Fn::Select": [
+          "1",
+          {"Ref": "Zones"}
+        ]}],
+        "VPCZoneIdentifier": [{"Fn::Select": [
+          "1",
+          {"Ref": "PrivateSubnets"}
+        ]}],
+        "LaunchConfigurationName": {"Ref": "LaunchConfig2"},
+        "MinSize": {"Ref": "NodesPerZone"},
+        "MaxSize": {"Ref": "NodesPerZone"},
+        "DesiredCapacity": {"Ref": "NodesPerZone"},
+        "Cooldown": "300",
+        "HealthCheckType": "EC2",
+        "HealthCheckGracePeriod": "300",
+        "LoadBalancerNames": [{"Ref": "ElasticLoadBalancer"}],
+        "NotificationConfiguration": {"Fn::If": [
+          "UseLogSNS",
+          {
+            "TopicARN": {"Ref": "LogSNS"},
+            "NotificationTypes": [
+              "autoscaling:EC2_INSTANCE_LAUNCH",
+              "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+              "autoscaling:EC2_INSTANCE_TERMINATE",
+              "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+            ]
+          },
+          {"Ref": "AWS::NoValue"}
+        ]},
+        "Tags": [{
+          "Key": "ASGInstance",
+          "Value": "ASG2",
+          "PropagateAtLaunch": true
+        }]
+      },
+      "Metadata": {
+        "MarkLogic::MetaDataVersion": "2015-07-17-14:49:23",
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "default": [
+              {"ConfigSet": "bootstrap"},
+              {"ConfigSet": "update"}
+            ],
+            "bootstrap": ["config_bootstrap"],
+            "update": ["config_update"]
+          },
+          "config_bootstrap": {
+            "packages": {"yum": {
+              "aws-cli": [],
+              "rsyslog": [],
+              "yum-utils": []
+            }},
+            "commands": {},
+            "services": {"sysvinit": {"MarkLogic": {
+              "enabled": "true",
+              "ensureRunning": "false"
+            }}}
+          },
+          "config_update": {
+            "files": {"/etc/marklogic.conf": {
+              "content": {"Fn::Join": [
+                "",
+                [
+                  "export MARKLOGIC_CLUSTER_NAME=",
+                  {"Ref": "MarkLogicSDBDomain"},
+                  "\n",
+                  "export MARKLOGIC_EBS_VOLUME=",
+                  {"Ref": "MarklogicVolume2"},
+                  ",",
+                  {"Ref": "VolumeSize"},
+                  ",*\n",
+                  "export MARKLOGIC_NODE_NAME=NodeB#\n",
+                  "export MARKLOGIC_ADMIN_USERNAME=",
+                  {"Ref": "AdminUser"},
+                  "\n",
+                  "export MARKLOGIC_ADMIN_PASSWORD=",
+                  {"Ref": "AdminPass"},
+                  "\n",
+                  "export MARKLOGIC_CLUSTER_MASTER=0\n",
+                  "export MARKLOGIC_LICENSEE=",
+                  {"Ref": "Licensee"},
+                  "\n",
+                  "export MARKLOGIC_LICENSE_KEY=",
+                  {"Ref": "LicenseKey"},
+                  "\n",
+                  {"Fn::If": [
+                    "UseLogSNS",
+                    {"Fn::Join": [
+                      "",
+                      [
+                        "export MARKLOGIC_LOG_SNS=",
+                        {"Ref": "LogSNS"},
+                        "\n"
+                      ]
+                    ]},
+                    ""
+                  ]}
+                ]
+              ]},
+              "mode": "000444",
+              "owner": "root",
+              "group": "root"
+            }},
+            "services": {"sysvinit": {"MarkLogic": {
+              "enabled": "true",
+              "ensureRunning": "true",
+              "files": [
+                "/etc/marklogic.conf",
+                "/etc/sysconfig/MarkLogic"
+              ],
+              "packages": [{"yum": [
+                "MarkLogic",
+                "java"
+              ]}]
+            }}}
+          }
+        }
+      }
+    },
+    "ZoneAutoScalingGroup3": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "AvailabilityZones": [{"Fn::Select": [
+          "2",
+          {"Ref": "Zones"}
+        ]}],
+        "VPCZoneIdentifier": [{"Fn::Select": [
+          "2",
+          {"Ref": "PrivateSubnets"}
+        ]}],
+        "LaunchConfigurationName": {"Ref": "LaunchConfig3"},
+        "MinSize": {"Ref": "NodesPerZone"},
+        "MaxSize": {"Ref": "NodesPerZone"},
+        "DesiredCapacity": {"Ref": "NodesPerZone"},
+        "Cooldown": "300",
+        "HealthCheckType": "EC2",
+        "HealthCheckGracePeriod": "300",
+        "LoadBalancerNames": [{"Ref": "ElasticLoadBalancer"}],
+        "NotificationConfiguration": {"Fn::If": [
+          "UseLogSNS",
+          {
+            "TopicARN": {"Ref": "LogSNS"},
+            "NotificationTypes": [
+              "autoscaling:EC2_INSTANCE_LAUNCH",
+              "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+              "autoscaling:EC2_INSTANCE_TERMINATE",
+              "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+            ]
+          },
+          {"Ref": "AWS::NoValue"}
+        ]},
+        "Tags": [{
+          "Key": "ASGInstance",
+          "Value": "ASG3",
+          "PropagateAtLaunch": true
+        }]
+      },
+      "Metadata": {
+        "MarkLogic::MetaDataVersion": "2015-07-17-14:49:23",
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "default": [
+              {"ConfigSet": "bootstrap"},
+              {"ConfigSet": "update"}
+            ],
+            "bootstrap": ["config_bootstrap"],
+            "update": ["config_update"]
+          },
+          "config_bootstrap": {
+            "packages": {"yum": {
+              "aws-cli": [],
+              "rsyslog": [],
+              "yum-utils": []
+            }},
+            "commands": {},
+            "services": {"sysvinit": {"MarkLogic": {
+              "enabled": "true",
+              "ensureRunning": "false"
+            }}}
+          },
+          "config_update": {
+            "files": {"/etc/marklogic.conf": {
+              "content": {"Fn::Join": [
+                "",
+                [
+                  "export MARKLOGIC_CLUSTER_NAME=",
+                  {"Ref": "MarkLogicSDBDomain"},
+                  "\n",
+                  "export MARKLOGIC_EBS_VOLUME=",
+                  {"Ref": "MarklogicVolume3"},
+                  ",",
+                  {"Ref": "VolumeSize"},
+                  ",*\n",
+                  "export MARKLOGIC_NODE_NAME=NodeC#\n",
+                  "export MARKLOGIC_ADMIN_USERNAME=",
+                  {"Ref": "AdminUser"},
+                  "\n",
+                  "export MARKLOGIC_ADMIN_PASSWORD=",
+                  {"Ref": "AdminPass"},
+                  "\n",
+                  "export MARKLOGIC_CLUSTER_MASTER=0\n",
+                  "export MARKLOGIC_LICENSEE=",
+                  {"Ref": "Licensee"},
+                  "\n",
+                  "export MARKLOGIC_LICENSE_KEY=",
+                  {"Ref": "LicenseKey"},
+                  "\n",
+                  {"Fn::If": [
+                    "UseLogSNS",
+                    {"Fn::Join": [
+                      "",
+                      [
+                        "export MARKLOGIC_LOG_SNS=",
+                        {"Ref": "LogSNS"},
+                        "\n"
+                      ]
+                    ]},
+                    ""
+                  ]}
+                ]
+              ]},
+              "mode": "000444",
+              "owner": "root",
+              "group": "root"
+            }},
+            "services": {"sysvinit": {"MarkLogic": {
+              "enabled": "true",
+              "ensureRunning": "true",
+              "files": [
+                "/etc/marklogic.conf",
+                "/etc/sysconfig/MarkLogic"
+              ],
+              "packages": [{"yum": [
+                "MarkLogic",
+                "java"
+              ]}]
+            }}}
+          }
+        }
+      }
+    },
+    "LaunchConfig1": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Properties": {
+        "KeyName": {"Ref": "KeyName"},
+        "ImageId": {"Ref": "AMI"},
+        "UserData": {"Fn::Base64": {"Fn::Join": [
+          "",
+          [
+            "#!/bin/bash\n",
+            "function error_exit\n",
+            "{\n",
+            "     logger -t MarkLogic  \"$1\"",
+            "  exit 1\n",
+            "}\n",
+            "yum update -y aws-cfn-bootstrap\n",
+            "yum update -y\n",
+            "# Install application\n",
+            "/opt/aws/bin/cfn-init -v -s ",
+            {"Ref": "AWS::StackId"},
+            " -r ZoneAutoScalingGroup1  --region ",
+            {"Ref": "AWS::Region"},
+            " || error_exit 'Failed to run cfn-init'\n",
+            "\n",
+            "# All is well so signal success\n",
+            "\n"
+          ]
+        ]}},
+        "SecurityGroups": [{"Ref": "InstanceSecurityGroup"}],
+        "InstanceType": {"Ref": "InstanceType"},
+        "IamInstanceProfile": {"Ref": "IAMRole"}
+      }
+    },
+    "LaunchConfig2": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Properties": {
+        "KeyName": {"Ref": "KeyName"},
+        "ImageId": {"Ref": "AMI"},
+        "UserData": {"Fn::Base64": {"Fn::Join": [
+          "",
+          [
+            "#!/bin/bash\n",
+            "function error_exit\n",
+            "{\n",
+            "     logger -t MarkLogic  \"$1\"",
+            "  exit 1\n",
+            "}\n",
+            "yum update -y aws-cfn-bootstrap\n",
+            "yum update -y\n",
+            "# Install application\n",
+            "/opt/aws/bin/cfn-init -v -s ",
+            {"Ref": "AWS::StackId"},
+            " -r ZoneAutoScalingGroup2  --region ",
+            {"Ref": "AWS::Region"},
+            " || error_exit 'Failed to run cfn-init'\n",
+            "\n",
+            "# All is well so signal success\n",
+            "\n"
+          ]
+        ]}},
+        "SecurityGroups": [{"Ref": "InstanceSecurityGroup"}],
+        "InstanceType": {"Ref": "InstanceType"},
+        "IamInstanceProfile": {"Ref": "IAMRole"}
+      }
+    },
+    "LaunchConfig3": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Properties": {
+        "KeyName": {"Ref": "KeyName"},
+        "ImageId": {"Ref": "AMI"},
+        "UserData": {"Fn::Base64": {"Fn::Join": [
+          "",
+          [
+            "#!/bin/bash\n",
+            "function error_exit\n",
+            "{\n",
+            "     logger -t MarkLogic  \"$1\"",
+            "  exit 1\n",
+            "}\n",
+            "yum update -y aws-cfn-bootstrap\n",
+            "yum update -y\n",
+            "# Install application\n",
+            "/opt/aws/bin/cfn-init -v -s ",
+            {"Ref": "AWS::StackId"},
+            " -r ZoneAutoScalingGroup3  --region ",
+            {"Ref": "AWS::Region"},
+            " || error_exit 'Failed to run cfn-init'\n",
+            "\n",
+            "# All is well so signal success\n",
+            "\n"
+          ]
+        ]}},
+        "SecurityGroups": [{"Ref": "InstanceSecurityGroup"}],
+        "InstanceType": {"Ref": "InstanceType"},
+        "IamInstanceProfile": {"Ref": "IAMRole"}
+      }
+    },
+    "ElasticLoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties": {
+        "AppCookieStickinessPolicy": [{
+          "CookieName": "SessionID",
+          "PolicyName": "MLSession"
+        }],
+              "ConnectionDrainingPolicy" : {
+                "Enabled" : true ,
+                "Timeout" : 30 
+              },
+              
+      "ConnectionSettings" : 
+      { 
+              "IdleTimeout" : { "Ref" : "ELBIdleTimeout"}
+      },
+      "CrossZone" : true,
+        "Subnets": {"Ref": "PublicSubnets"},
+        "Listeners": [
+          {
+            "LoadBalancerPort": "8000",
+            "InstancePort": "8000",
+            "Protocol": "HTTP",
+            "PolicyNames": ["MLSession"]
+          },
+          {
+            "LoadBalancerPort": "8001",
+            "InstancePort": "8001",
+            "Protocol": "HTTP",
+            "PolicyNames": ["MLSession"]
+          },
+          {
+            "LoadBalancerPort": "8002",
+            "InstancePort": "8002",
+            "Protocol": "HTTP",
+            "PolicyNames": ["MLSession"]
+          },
+          {
+            "LoadBalancerPort": "8003",
+            "InstancePort": "8003",
+            "Protocol": "HTTP",
+            "PolicyNames": ["MLSession"]
+          },
+          {
+            "LoadBalancerPort": "8004",
+            "InstancePort": "8004",
+            "Protocol": "HTTP",
+            "PolicyNames": ["MLSession"]
+          },
+          {
+            "LoadBalancerPort": "8005",
+            "InstancePort": "8005",
+            "Protocol": "HTTP",
+            "PolicyNames": ["MLSession"]
+          },
+          {
+            "LoadBalancerPort": "8006",
+            "InstancePort": "8006",
+            "Protocol": "HTTP",
+            "PolicyNames": ["MLSession"]
+          },
+          {
+            "LoadBalancerPort": "8007",
+            "InstancePort": "8007",
+            "Protocol": "HTTP",
+            "PolicyNames": ["MLSession"]
+          },
+          {
+            "LoadBalancerPort": "8008",
+            "InstancePort": "8008",
+            "Protocol": "HTTP",
+            "PolicyNames": ["MLSession"]
+          }
+        ],
+        "HealthCheck": {
+          "Target": "HTTP:7997/",
+          "HealthyThreshold": "3",
+          "UnhealthyThreshold": "5",
+          "Interval": "10",
+          "Timeout": "5"
+        },
+        "SecurityGroups": [{"Ref": "ELBSecurityGroup"}]
+
+      }
+    },
+    "InstanceSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {"Ref": "VPC"},
+        "GroupDescription": "Enable SSH access and HTTP access on the inbound port",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "22",
+            "ToPort": "22",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "7998",
+            "ToPort": "7998",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8000",
+            "ToPort": "8010",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8000",
+            "ToPort": "8010",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "7997",
+            "ToPort": "7997",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "7998",
+            "ToPort": "7999",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    },
+    "ELBSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {"Ref": "VPC"},
+        "GroupDescription": "ELB Security Group",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "8000",
+            "ToPort": "8010",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {"URL": {
+    "Description": "The URL of the MarkLogic Cluster",
+    "Value": {"Fn::Join": [
+      "",
+      [
+        "http://",
+        {"Fn::GetAtt": [
+          "ElasticLoadBalancer",
+          "DNSName"
+        ]},
+        ":8001"
+      ]
+    ]}
+  }}
+}

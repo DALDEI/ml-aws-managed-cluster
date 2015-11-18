@@ -1,0 +1,288 @@
+
+ {
+  "AWSTemplateFormatVersion":"2010-09-09",
+  "Description":"Create a single az, load balanced, MarkLogic System. MarkLogic-7.0-1.x86_64.rpm",
+  "Parameters":
+   {
+       "AMI": {
+      "Description": "Base AMI of MarkLogic installation",
+      "Type": "String",
+      "Default": "ami-9c7b9eaf"
+    },
+     "VPCTemplate":
+     {
+      "Description":"The VPC Template S3 URL",
+      "Type":"String",
+      "Default": "https://s3.amazonaws.com/marklogic-build-data/aws-vpc/aws-vpc3zone-public-private.template"
+     },
+     "MLTemplate":
+     {
+      "Description":"The ML VPC Template S3 URL",
+      "Type":"String",
+      "Default": "https://s3.amazonaws.com/marklogic-build-data/aws-vpc/aws-ml3zone-private-v7.template"
+     },
+    "AdminUser":
+     {
+      "Description":"The MarkLogic Administrator Username",
+      "Type":"String"
+     },
+    "AdminPass":
+     {
+      "Description":"The MarkLogic Administrator Password",
+      "Type":"String",
+      "NoEcho":"TRUE"
+     },
+    "Deployment": {
+      "Type": "String",
+      "Description": "Deployment version (increment to force cfn-hup update)",
+      "Default": "0"
+    },
+    "Licensee":
+     {
+      "Description":"The MarkLogic Licensee",
+      "Type":"String",
+      "Default":"none"
+     },
+    "LicenseKey":
+     {
+      "Description":"The MarkLogic License Key",
+      "Type":"String",
+      "Default":"none"
+     },
+    "MLInstanceType":
+     {
+      "Description":"Instande Type of MarkLogic EC2 instance to launch",
+      "Type":"String",
+      "Default":"c3.large",
+            "AllowedValues" : [ 
+       "c3.2xlarge","c3.4xlarge","c3.8xlarge","c3.large","c3.xlarge","c4.2xlarge","c4.4xlarge","c4.8xlarge","c4.large","c4.xlarge","cc2.8xlarge","cr1.8xlarge","d2.2xlarge","d2.4xlarge","d2.8xlarge","d2.xlarge","g2.2xlarge","hi1.4xlarge","hs1.8xlarge","i2.2xlarge","i2.4xlarge","i2.8xlarge","i2.xlarge","m1.large","m1.medium","m1.small","m1.xlarge","m2.2xlarge","m2.4xlarge","m2.xlarge","m3.2xlarge","m3.large","m3.medium","m3.xlarge","m4.10xlarge","m4.2xlarge","m4.4xlarge","m4.large","m4.xlarge","r3.2xlarge","r3.4xlarge","r3.8xlarge","r3.large","r3.xlarge","t1.micro","t2.large","t2.medium","t2.micro","t2.small"
+      ]
+     },
+    "IAMRole":
+     {
+      "Description":"IAM Role",
+      "Type":"String"
+     },
+    "KeyName": {
+      "Description": "Name of an existing EC2 KeyPair to enable SSH access to the bastion host",
+      "Type": "AWS::EC2::KeyPair::KeyName",
+      "ConstraintDescription": "must be the name of an existing EC2 KeyPair."
+    },
+     "Zones":
+     {
+      "Description":"The AZ Zones",
+      "Type": "List<AWS::EC2::AvailabilityZone::Name>"
+      },
+    "VolumeSize":
+     {
+      "Description":"The initial EBS volume size (GB) per node",
+      "Type":"Number",
+      "MinValue":"10",
+      "MaxValue":"1000",
+      "Default":"10"
+     },
+       "VolumeType":
+     {
+      "Description":"The EBS Data volume Type",
+      "Type":"String",
+      "AllowedValues":
+       ["standard","gp2"],
+      "Default":"gp2"
+     },
+     
+     
+    "NodesPerZone":
+     {
+      "Description":"Nodes per AZ Zone.  Set to 1 or more to initialize, 0 to shutdown",
+      "Type":"Number",
+      "MinValue":"0",
+      "MaxValue":"100",
+      "Default":"1"
+     },
+    "LogSNS":
+     {
+      "Description":"SNS Topic for logging",
+      "Type":"String",
+      "Default":"none"
+     },
+     "ELBIdleTimeout" : {
+      "Type" : "Number",
+      "Description" : "The ELB Idle timeout in seconds [default 60 seconds]",
+      "Default" : 60 ,
+      "MinValue" : 1 ,
+      "MaxValue"  : 3600 
+    },
+       "NetworkName": {
+      "Description": "Name used to tag network",
+      "Type": "String"
+    },
+    "SSHLocation": {
+      "Description": "Lockdown SSH access to the bastion host (default can be accessed from anywhere)",
+      "Type": "String",
+      "MinLength": 9,
+      "MaxLength": 18,
+      "Default": "0.0.0.0/0",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid CIDR range of the form x.x.x.x/x."
+    },
+    "VPNInstanceType": {
+      "Description": "OpenVPN EC2 instance type",
+      "Type": "String",
+      "Default": "t2.micro",
+      "AllowedValues" : [ 
+       "c3.2xlarge","c3.4xlarge","c3.8xlarge","c3.large","c3.xlarge","c4.2xlarge","c4.4xlarge","c4.8xlarge","c4.large","c4.xlarge","cc2.8xlarge","cr1.8xlarge","d2.2xlarge","d2.4xlarge","d2.8xlarge","d2.xlarge","g2.2xlarge","hi1.4xlarge","hs1.8xlarge","i2.2xlarge","i2.4xlarge","i2.8xlarge","i2.xlarge","m1.large","m1.medium","m1.small","m1.xlarge","m2.2xlarge","m2.4xlarge","m2.xlarge","m3.2xlarge","m3.large","m3.medium","m3.xlarge","m4.10xlarge","m4.2xlarge","m4.4xlarge","m4.large","m4.xlarge","r3.2xlarge","r3.4xlarge","r3.8xlarge","r3.large","r3.xlarge","t1.micro","t2.large","t2.medium","t2.micro","t2.small"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    },
+    "NATInstanceType": {
+      "Description": "OpenVPN EC2 instance type",
+      "Type": "String",
+      "Default": "t2.micro",
+      "AllowedValues" : [ 
+       "c3.2xlarge","c3.4xlarge","c3.8xlarge","c3.large","c3.xlarge","c4.2xlarge","c4.4xlarge","c4.8xlarge","c4.large","c4.xlarge","cc2.8xlarge","cr1.8xlarge","d2.2xlarge","d2.4xlarge","d2.8xlarge","d2.xlarge","g2.2xlarge","hi1.4xlarge","hs1.8xlarge","i2.2xlarge","i2.4xlarge","i2.8xlarge","i2.xlarge","m1.large","m1.medium","m1.small","m1.xlarge","m2.2xlarge","m2.4xlarge","m2.xlarge","m3.2xlarge","m3.large","m3.medium","m3.xlarge","m4.10xlarge","m4.2xlarge","m4.4xlarge","m4.large","m4.xlarge","r3.2xlarge","r3.4xlarge","r3.8xlarge","r3.large","r3.xlarge","t1.micro","t2.large","t2.medium","t2.micro","t2.small"
+      ],
+
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    },
+    "VPCCidr": {
+      "Description": "The VPC CIDR Range",
+      "Type": "String",
+      "MinLength": 9,
+      "MaxLength": 18,
+      "Default": "10.0.0.0/16",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      "ConstraintDescription": "must be a valid CIDR range of the form x.x.x.x/x."
+    },
+    "PublicCidrs": {
+      "Description": "Three Public Subnet CIDR Rangees seperated by commas.",
+      "Type": "CommaDelimitedList",
+      "Default": "10.0.0.0/24,10.0.1.0/24,10.0.2.0/24",
+      "ConstraintDescription": "must be a valid CIDR range of the form x.x.x.x/x."
+    },
+       "PrivateCidrs": {
+      "Description": "Three Private Subnet CIDR Ranges seperated by commas.",
+      "Type": "CommaDelimitedList",
+      "Default": "10.0.3.0/24,10.0.4.0/24,10.0.5.0/24",
+      "ConstraintDescription": "must be a valid CIDR range of the form x.x.x.x/x."
+    },
+
+   "NATPrivateIPs": {
+      "Description": "Three Private IPs of the NAT Instances in the public subnet seperated by commas.",
+      "Type": "CommaDelimitedList",
+      "Default": "10.0.0.11,10.0.1.11,10.0.2.11",
+      "ConstraintDescription": "must be a valid IP list of the form x.x.x.x"
+    },
+    "VPNPrivateIP": {
+      "Description": "The Private IP of the VPN Instance in the public subnet",
+      "Type": "String",
+      "MinLength": 7,
+      "MaxLength": 15,
+      "Default": "10.0.0.10",
+      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})",
+      "ConstraintDescription": "must be a valid IP of the form x.x.x.x"
+    }
+   },
+   
+  "Conditions" : {
+    "UseLogSNS" : { "Fn::Not" : [ {"Fn::Equals" : [{"Ref" : "LogSNS"}, "none"]} ] }
+  },
+  
+  
+  "Resources" : {
+      "VPCStack" :
+      {
+       "Type" : "AWS::CloudFormation::Stack",
+       "Properties" : {
+          "TemplateURL" : {"Ref":"VPCTemplate"},
+          "TimeoutInMinutes" : "10",
+          "Parameters" : {
+             "NetworkName"        : { "Ref" : "NetworkName" },
+             "SSHLocation"        : { "Ref" : "SSHLocation" },
+             "VPNInstanceType" : { "Ref" : "VPNInstanceType" },
+             "NATInstanceType" : { "Ref" : "NATInstanceType" },
+             "KeyName"         : { "Ref" : "KeyName" },
+             "VPCCidr"         : { "Ref" : "VPCCidr" },
+             "PublicCidrs"      : { "Fn::Join" : [ "," ,  { "Ref" : "PublicCidrs" } ]},
+             "PrivateCidrs"     : { "Fn::Join" : [ "," ,  { "Ref" : "PrivateCidrs" }]},
+             "VPNPrivateIP"     : { "Ref" : "VPNPrivateIP" },
+             "NATPrivateIPs"    : { "Fn::Join" : [ "," ,  { "Ref" : "NATPrivateIPs" }]},
+             "Zones"            : { "Fn::Join" : [ "," ,  { "Ref" : "Zones" }]}
+          }
+       }
+    },
+    "MLStack":
+    {
+       "Type" : "AWS::CloudFormation::Stack",
+       "Properties" : {
+          "TemplateURL" : {"Ref":"MLTemplate"},
+          "TimeoutInMinutes" : "30",
+          "Parameters" : {
+             "AMI"       : { "Ref" : "AMI"},
+             "AdminUser" : { "Ref" : "AdminUser" },
+             "AdminPass" : { "Ref" : "AdminPass" },
+             "Deployment" : { "Ref" : "Deployment"},
+             "Licensee"  : { "Ref" : "Licensee" },
+             "LicenseKey": { "Ref" : "LicenseKey" },
+             "InstanceType":{ "Ref" : "MLInstanceType" },
+             "IAMRole":{ "Ref" : "IAMRole" },
+             "KeyName":{ "Ref" : "KeyName" },
+             "VPC":    { "Fn::GetAtt" : [ "VPCStack", "Outputs.VpcID" ] },
+             "PublicSubnets":{ "Fn::GetAtt" : [ "VPCStack", "Outputs.PublicSubnets" ] },
+             "PrivateSubnets":{ "Fn::GetAtt" : [ "VPCStack", "Outputs.PrivateSubnets" ] },
+             "Zones"            : { "Fn::Join" : [ "," ,  { "Ref" : "Zones" }]},
+             "VolumeSize"   :{ "Ref" : "VolumeSize"  },
+             "VolumeType"   :{ "Ref" : "VolumeType"  },
+             "NodesPerZone": { "Ref" : "NodesPerZone"  },
+             "LogSNS":{ "Ref" : "LogSNS"  },
+             "ELBIdleTimeout" : { "Ref" : "ELBIdleTimeout"}
+       }
+    }
+   }
+},
+
+    
+ 
+  "Outputs":
+   {   
+     "URL" :  {
+           "Description":"The URL of the MarkLogic Cluster",
+           "Value" : { "Fn::GetAtt" : [ "MLStack", "Outputs.URL" ] }
+      },
+     
+     "VpcID" : {
+       "Description": "The VPC ID" ,
+	   "Value" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.VpcID" ] }
+     },
+     
+     "Zones"   : {
+        "Description" : "The AZ Zones",
+         "Value": {"Fn::Join" : [ "," , { "Ref" : "Zones" }]}
+     },
+    "PublicSubnets" : {
+       "Description": "The Public Subnet ID" ,
+	   "Value" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.PublicSubnets" ] }
+     },
+     "PrivateSubnets" : {
+       "Description": "The Private Subnet ID" ,
+	   "Value" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.PrivateSubnets" ] }
+     },	
+    "VpnIP" : {
+	   "Description": "The Public IP of the VPN" ,
+	   "Value" : 
+	   { "Fn::GetAtt" : [ "VPCStack", "Outputs.VpnIP" ] }
+     },		
+     "NatIPs" : {
+	   "Description": "The Public IP of the NATs" ,
+	   "Value" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.NatIPs" ] }
+     }, 
+    "VpnURL":
+     {
+      "Description":"The URL of Admin GUI",
+      "Value" : { "Fn::GetAtt" : [ "VPCStack", "Outputs.VpnURL" ] }
+     },
+     "Login" : {
+          "Description": "VPN Setup Login" ,
+         "Value": "To setup the VPN SSH to the VPN Public ID and login as 'openvpnas'"
+     }
+   }
+ }

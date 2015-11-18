@@ -1,0 +1,1191 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Create an nCommerce (ODD) Stack",
+  "Parameters": {
+    "AppVersion": {
+      "Type": "String",
+      "Description": "nexstra-odd-app version"
+    },
+    "Environment": {
+      "Type": "String",
+      "Description": "Runtime Environment",
+      "AllowedValues" : [ "dev","qa","core","release" ]
+    },
+    "InstanceType": {
+      "Description": "EC2 instance type",
+      "Type": "String",
+      "Default": "t2.micro",
+      "AllowedValues": [
+        "t2.micro",
+        "t2.small",
+        "t2.medium",
+        "m1.small",
+        "m1.medium",
+        "m1.large",
+        "m1.xlarge",
+        "m2.xlarge",
+        "m2.4xlarge",
+        "m3.medium",
+        "m3.large",
+        "m3.xlarge",
+        "m3.2xlarge",
+        "c1.medium",
+        "c1.xlarge",
+        "c3.large",
+        "c3.xlarge",
+        "c3.2xlarge",
+        "c3.4xlarge",
+        "c3.8xlarge",
+        "c4.large",
+        "c4.xlarge",
+        "c4.2xlarge",
+        "c4.4xlarge",
+        "c4.8xlarge",
+        "g2.2xlarge",
+        "r3.large",
+        "r3.xlarge",
+        "r3.2xlarge",
+        "r3.4xlarge",
+        "r3.8xlarge",
+        "i2.xlarge",
+        "i2.2xlarge",
+        "i2.4xlarge",
+        "i2.8xlarge",
+        "d2.xlarge",
+        "d2.2xlarge",
+        "d2.4xlarge",
+        "d2.8xlarge",
+        "hi1.4xlarge",
+        "hs1.8xlarge",
+        "cr1.8xlarge",
+        "cc2.8xlarge",
+        "cg1.4xlarge"
+      ],
+      "ConstraintDescription": "must be a valid EC2 instance type."
+    },
+    "AMI": {
+      "Description": "AMI of odd-core image",
+      "Type": "String",
+      "Default": "ami-a6b75495"
+    },
+    "VPC": {
+      "Description": "The VPC ID",
+      "Type": "AWS::EC2::VPC::Id"
+    },
+    "IAMRole": {
+      "Description": "IAM Role",
+      "Type": "String",
+      "Default": "ODDServer"
+    },
+    "KeyName": {
+      "Description": "The EC2 Key Pair to allow SSH access to the instances",
+      "Type": "String",
+      "Default": "nexstra"
+    },
+    "AppInstance": {
+      "Description": "The Appplication Instance",
+      "Type": "String",
+      "Default": "store2",
+      "AllowedValues": [
+        "store2",
+        "demo",
+        "demo2",
+        "store",
+        "store3"
+      ]
+    },
+    "Nodes": {
+      "Description": "Total number of nodes desired",
+      "Type": "Number",
+      "MinValue": "0",
+      "MaxValue": "4",
+      "Default": "1"
+    },
+    "PublicSubnets": {
+      "Description": "The Subnet IDs",
+      "Type": "List<AWS::EC2::Subnet::Id>"
+    },
+    "SSLCertificateId": {
+      "Type": "String",
+      "Description": "The SSL Certificate ID to use for HTTPS",
+      "Default": "arn:aws:iam::114709661826:server-certificate/DigiCert2014_ReKey"
+    },
+    "EC2SecurityGroupId": {
+      "Type": "AWS::EC2::SecurityGroup::Id",
+      "Description": "EC2 Security Group ID for the EC2 instances (from VPC)"
+    },
+    "SNSTopic": {
+      "Type": "String",
+      "Description": "SNS Topic for notifications",
+      "Default": "arn:aws:sns:us-west-2:114709661826:Loggly"
+    },
+    "BucketName": {
+      "Description": "Name of bucket containing packages",
+      "Type": "String",
+      "Default": "nexstra-com-build"
+    },
+    "DBHostname": {
+      "Type": "String",
+      "Description": "Database Hostname/DNS",
+      "Default": ""
+    },
+    "DBPassword": {
+      "Type": "String",
+      "Description": "Database password associated with DBUsername",
+      "Default": "1derful!"
+    },
+    "DBUsername": {
+      "Type": "String",
+      "Description": "Database User Name",
+      "Default": "nexstra"
+    },
+    "DBName": {
+      "Type": "String",
+      "Description": "Database Name",
+      "Default": "odd"
+    },
+    "Deployment": {
+      "Type": "String",
+      "Description": "Deployment version (to force reload)",
+      "Default": "0"
+    },
+    "ETAG": {
+      "Type": "String",
+      "Description": "Logging Tag",
+      "Default": "TEST"
+    },
+    "TLSv1": {
+      "Type": "String",
+      "Description": "Set to 'true' to enable TLSv1.0 -- NOTE: this violates PCI compliance",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ]
+    }
+  },
+  "Resources": {
+    "ServerGroup": {
+      "Type": "AWS::AutoScaling::AutoScalingGroup",
+      "Properties": {
+        "VPCZoneIdentifier": {
+          "Ref": "PublicSubnets"
+        },
+        "LaunchConfigurationName": {
+          "Ref": "LaunchConfig"
+        },
+        "MinSize": "1",
+        "MaxSize": "10",
+        "Cooldown": "30",
+        "DesiredCapacity": {
+          "Ref": "Nodes"
+        },
+        "HealthCheckType": "ELB",
+        "HealthCheckGracePeriod": "300",
+        "LoadBalancerNames": [
+          {
+            "Ref": "ElasticLoadBalancer"
+          }
+        ],
+        "NotificationConfiguration": {
+          "TopicARN": {
+            "Ref": "SNSTopic"
+          },
+          "NotificationTypes": [
+            "autoscaling:EC2_INSTANCE_LAUNCH",
+            "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
+            "autoscaling:EC2_INSTANCE_TERMINATE",
+            "autoscaling:EC2_INSTANCE_TERMINATE_ERROR"
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "AppInstance",
+            "Value": {
+              "Ref": "AppInstance"
+            },
+            "PropagateAtLaunch": true
+          },
+          {
+            "Key": "ETAG",
+            "Value": {
+              "Ref": "ETAG"
+            },
+            "PropagateAtLaunch": true
+          }
+        ]
+      },
+      "Metadata": {
+        "AWS::CloudFormation::Designer": {
+          "id": "828eb083-015e-4f0b-8203-72763b5d70a0"
+        }
+      }
+    },
+    "LaunchConfig": {
+      "Type": "AWS::AutoScaling::LaunchConfiguration",
+      "Properties": {
+        "AssociatePublicIpAddress": true,
+        "KeyName": {
+          "Ref": "KeyName"
+        },
+        "ImageId": {
+          "Ref": "AMI"
+        },
+        "UserData": {
+          "Fn::Base64": {
+            "Fn::Join": [
+              "",
+              [
+                "#!/bin/bash\n",
+                "yum clean metadata \n",
+                "# Install application\n",
+                "# \n",
+                "yum update -y aws-cfn-bootstrap\n",
+                "/opt/aws/bin/cfn-init -v -s ",
+                {
+                  "Ref": "AWS::StackId"
+                },
+                " -r LaunchConfig ",
+                " --configsets ",
+                "default",
+                " --region ",
+                {
+                  "Ref": "AWS::Region"
+                },
+                " || logger -t cfn-init 'Failed to run cfn-init'\n",
+                "\n",
+                "# Start up the cfn-hup daemon to listen for changes to the Web Server metadata\n",
+                "/opt/aws/bin/cfn-hup || logger -t cfn-init 'Failed to start cfn-hup '\n",
+                "exit 0\n"
+              ]
+            ]
+          }
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "EC2SecurityGroupId"
+          }
+        ],
+        "InstanceType": {
+          "Ref": "InstanceType"
+        },
+        "IamInstanceProfile": {
+          "Ref": "IAMRole"
+        }
+      },
+      "Metadata": {
+        "Nexstra::MetaDataDeployment": {
+          "Ref": "Deployment"
+        },
+        "AWS::CloudFormation::Init": {
+          "configSets": {
+            "default": [
+              "prepare",
+              "install",
+              "cfnhup",
+              "complete"
+            ],
+            "update": [
+              {
+                "ConfigSet": "default"
+              },
+              "post-update"
+            ]
+          },
+          "prepare": {
+            "files": {
+              "/etc/yum.repos.d/nexstra.repo": {
+                "source": {
+                  "Fn::Join" : [ "" , [ 
+                      "http://nexstra-com-build.s3.amazonaws.com/repo/aws-ec2/nexstra-" ,
+                      { "Ref" : "Environment" } , 
+                     ".repo" ]  ]
+                },
+                "owner": "root",
+                "group": "root",
+                "mode": "000400",
+                "authentication": "S3AccessCreds"
+              }
+            },
+            "commands": {
+              "1_log_prepare": {
+                "command": "logger -t cloudint running configset prepare "
+              },
+              "yum_clean": {
+                "command": "yum clean metadata"
+              }
+            }
+          },
+          "install": {
+            "commands": {
+              "1_log_install": {
+                "command": "logger -t cloudint running configset install"
+              }
+            },
+            "packages": {
+              "yum": {
+                "nexstra-odd-app": [
+                  {
+                    "Ref": "AppVersion"
+                  }
+                ]
+              }
+            },
+            "services": {
+              "sysvinit": {
+                "rsyslog": {
+                  "files": [
+                    "/etc/rsyslog.conf",
+                    "/etc/rsyslog.d/15-logglytags.conf"
+                  ],
+                  "sources": [
+                    "/etc/rsyslog.d"
+                  ],
+                  "packages": {
+                    "yum": {
+                      "nexstra-odd-app": [],
+                      "nexstra-tomcat": [],
+                      "nexstra-odd-base": [],
+                      "nexstra-odd-env": [],
+                      "nexstra-tomcat-shared": []
+                    }
+                  },
+                  "ensureEnabled": "true",
+                  "ensureRunning": "true"
+                }
+              }
+            },
+            "files": {
+              "/usr/share/nexstra-tomcat/group.properties": {
+                "content": {
+                  "Fn::Join": [
+                    "\n",
+                    [
+                      "db.driver=org.gjt.mm.mysql.Driver",
+                      "db.connection=jdbc:mysql://{{dbhost}}:{{dbport}}/{{dbname}}",
+                      "db.username={{dbuser}}",
+                      "db.password={{dbpass}}",
+                      "db_ro.connection=jdbc:mysql://{{dbhost}}:{{dbport}}/{{dbname}}",
+                      "db_ro.username={{dbuser}}",
+                      "db_ro.password={{dbpass}}",
+                      "group.name={{group}}"
+                    ]
+                  ]
+                },
+                "context": {
+                  "dbhost": {
+                    "Ref": "DBHostname"
+                  },
+                  "dbport": 3306,
+                  "dbuser": {
+                    "Ref": "DBUsername"
+                  },
+                  "dbpass": {
+                    "Ref": "DBPassword"
+                  },
+                  "dbname": {
+                    "Ref": "DBName"
+                  }
+                },
+                "owner": "root",
+                "group": "root",
+                "mode": "000400"
+              },
+              "/var/local/nexstra/conf.d/deployment.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "\n",
+                    [
+                      "_NEXSTRA_DEPLOYMENT={{deployment}}",
+                      "_NEXSTRA_APP=\"nexstra-odd-app:{{app}}\"",
+                      ""
+                    ]
+                  ]
+                },
+                "context": {
+                  "deployment": {
+                    "Ref": "Deployment"
+                  },
+                  "app": {
+                    "Ref": "AppVersion"
+                  }
+                },
+                "owner": "root",
+                "group": "root",
+                "mode": "000422"
+              },
+              "/etc/rsyslog.d/15-logglytags.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "\n",
+                    [
+                      "set $.loggly_account = \"{{loggly_account}}\";", 
+                      "set $.logz_account = \"{{logz_account}}\";", 
+                      "set $.taga=\"{{taga}}\";",
+                      "set $.tagb=\"{{tagb}}\";",
+                      ""
+                    ]
+                  ]
+                },
+                "context": {
+                  "loggly_account": "877adc87-ce87-443a-bb4d-9cf39e7c26c2",
+                  "logz_account": "ngBFLEKeEjtpgvURNAQKhAchgLdIrjsi",
+                  "taga": {
+                    "Ref": "AppInstance"
+                  },
+                  "tagb": {
+                    "Ref": "Environment"
+                  }
+                },
+                "owner": "root",
+                "group": "root",
+                "mode": "000440"
+              }
+            }
+          },
+          "complete": {
+            "commands": {
+              "1_log_complete": {
+                "command": "logger -t cloudint running configset complete"
+              }
+            },
+            "services": {
+              "sysvinit": {
+                "rsyslog": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "/etc/rsyslog.d/15-logglytags.conf"
+                  ],
+                  "soruces": [
+                    "/etc/rsyslog.d/"
+                  ]
+                },
+                "postfix": {
+                  "enabled": "true",
+                  "ensureRunning": "true"
+                },
+                "nexstra-tomcat": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "/usr/share/nexstra-tomcat/group.properties",
+                    "/var/local/nexstra/conf.d/deployment.conf"
+                  ],
+                  "sources": [
+                    "/usr/share/nexstra-tomcat/shared/lib",
+                    "/usr/share/nexstra-tomcat/webapps",
+                    "/usr/share/nexstra-tomcat/conf",
+                    "/usr/share/nexstra-tomcat/group.properties"
+                  ],
+                  "packages": {
+                    "yum": {
+                      "nexstra-odd-app": [],
+                      "nexstra-tomcat": [],
+                      "nexstra-odd-base": [],
+                      "nexstra-odd-env": [],
+                      "nexstra-tomcat-shared": []
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "cfnhup": {
+            "commands": {
+              "1_log_cfnhup": {
+                "command": "logger -t cloudint running configset cfnhup"
+              }
+            },
+            "files": {
+              "/etc/cfn/cfn-hup.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[main]\n",
+                      "stack=",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      "\n",
+                      "region=",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      "\n",
+                      "interval=5\n"
+                    ]
+                  ]
+                },
+                "mode": "000400",
+                "owner": "root",
+                "group": "root"
+              },
+              "/etc/cfn/hooks.d/cfn-auto-reloader.conf": {
+                "content": {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "[cfn-auto-reloader-hook]\n",
+                      "triggers=post.update\n",
+                      "path=Resources.LaunchConfig.Metadata\n",
+                      "action=/opt/aws/bin/cfn-init -s ",
+                      {
+                        "Ref": "AWS::StackId"
+                      },
+                      " -r LaunchConfig ",
+                      " --region     ",
+                      {
+                        "Ref": "AWS::Region"
+                      },
+                      " --configsets update",
+                      "\n",
+                      "runas=root\n"
+                    ]
+                  ]
+                }
+              }
+            },
+            "services": {
+              "sysvinit": {
+                "cfn-hup": {
+                  "enabled": "true",
+                  "ensureRunning": "true",
+                  "files": [
+                    "/etc/cfn/cfn-hup.conf",
+                    "/etc/cfn/hooks.d/cfn-auto-reloader.conf"
+                  ]
+                }
+              }
+            }
+          },
+          "post-update": {
+            "commands": {
+              "1_log_postupdate": {
+                "command": "logger -t cloudint running configset post-update"
+              },
+              "2_yum_clean": {
+                "command": "yum clean metadata"
+              },
+              "3_yum_update": {
+                "command": "yum update -y"
+              },
+              "4_onupdate": {
+                "command": "/var/local/nexstra/bin/at-event update"
+              }
+            }
+          }
+        },
+        "AWS::CloudFormation::Authentication": {
+          "S3AccessCreds": {
+            "type": "S3",
+            "buckets": [
+              {
+                "Ref": "BucketName"
+              }
+            ],
+            "roleName": {
+              "Ref": "IAMRole"
+            }
+          }
+        },
+        "AWS::CloudFormation::Designer": {
+          "id": "9c72ea7a-4484-4c2a-b142-25c506e4f00b"
+        }
+      }
+    },
+    "ELBSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupDescription": "ELB Security Group",
+        "SecurityGroupIngress": [
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "80",
+            "ToPort": "80",
+            "CidrIp": "0.0.0.0/0"
+          },
+          {
+            "IpProtocol": "tcp",
+            "FromPort": "443",
+            "ToPort": "443",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ]
+      },
+      "Metadata": {
+        "AWS::CloudFormation::Designer": {
+          "id": "2171c201-098f-4f1e-acaa-8794388c9a3f"
+        }
+      }
+    },
+    "ELBtoEC2InboundRule": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "IpProtocol": "tcp",
+        "FromPort": "80",
+        "ToPort": "80",
+        "SourceSecurityGroupId": {
+          "Ref": "ELBSecurityGroup"
+        },
+        "GroupId": {
+          "Ref": "EC2SecurityGroupId"
+        }
+      }
+    },
+    "ElasticLoadBalancer": {
+      "Type": "AWS::ElasticLoadBalancing::LoadBalancer",
+      "Properties": {
+        "LoadBalancerName": {
+          "Fn::Join": [
+            "",
+            [
+              "ELB-",
+              {
+                "Ref": "AppInstance"
+              }
+            ]
+          ]
+        },
+        "Subnets": {
+          "Ref": "PublicSubnets"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Join": [
+                "",
+                [
+                  "ELB-",
+                  {
+                    "Ref": "AppInstance"
+                  }
+                ]
+              ]
+            }
+          },
+          {
+            "Key": "AppInstance",
+            "Value": {
+              "Ref": "AppInstance"
+            }
+          }
+        ],
+        "Listeners": [
+          {
+            "LoadBalancerPort": "80",
+            "InstancePort": "80",
+            "Protocol": "HTTP",
+            "PolicyNames": [
+              "SessionCookiePolicy"
+            ]
+          },
+          {
+            "LoadBalancerPort": "443",
+            "InstancePort": "80",
+            "Protocol": "HTTPS",
+            "PolicyNames": [
+              "SessionCookiePolicy",
+              "SSL-NoTLS10"
+            ],
+            "SSLCertificateId": {
+              "Ref": "SSLCertificateId"
+            }
+          }
+        ],
+        "Scheme": "internet-facing",
+        "CrossZone": "true",
+        "HealthCheck": {
+          "Target": "HTTP:80/odd/heartbeat",
+          "HealthyThreshold": "3",
+          "UnhealthyThreshold": "5",
+          "Interval": "10",
+          "Timeout": "5"
+        },
+        "SecurityGroups": [
+          {
+            "Ref": "ELBSecurityGroup"
+          }
+        ],
+        "LBCookieStickinessPolicy": [
+          {
+            "CookieExpirationPeriod": 10800,
+            "PolicyName": "SessionCookiePolicy"
+          }
+        ],
+        "Policies": [
+          {
+            "PolicyName": "SSL-NoTLS10",
+            "PolicyType": "SSLNegotiationPolicyType",
+            "Attributes": [
+              {
+                "Name": "Protocol-SSLv2",
+                "Value": "false"
+              },
+              {
+                "Name": "Protocol-TLSv1",
+                "Value": {
+                  "Ref": "TLSv1"
+                }
+              },
+              {
+                "Name": "Protocol-SSLv3",
+                "Value": "false"
+              },
+              {
+                "Name": "Protocol-TLSv1.1",
+                "Value": "true"
+              },
+              {
+                "Name": "Protocol-TLSv1.2",
+                "Value": "true"
+              },
+              {
+                "Name": "Server-Defined-Cipher-Order",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-ECDSA-AES128-GCM-SHA256",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-RSA-AES128-GCM-SHA256",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-ECDSA-AES128-SHA256",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-RSA-AES128-SHA256",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-ECDSA-AES128-SHA",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-RSA-AES128-SHA",
+                "Value": "true"
+              },
+              {
+                "Name": "DHE-RSA-AES128-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "ECDHE-ECDSA-AES256-GCM-SHA384",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-RSA-AES256-GCM-SHA384",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-ECDSA-AES256-SHA384",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-RSA-AES256-SHA384",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-RSA-AES256-SHA",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-ECDSA-AES256-SHA",
+                "Value": "true"
+              },
+              {
+                "Name": "AES128-GCM-SHA256",
+                "Value": "true"
+              },
+              {
+                "Name": "AES128-SHA256",
+                "Value": "true"
+              },
+              {
+                "Name": "AES128-SHA",
+                "Value": "true"
+              },
+              {
+                "Name": "AES256-GCM-SHA384",
+                "Value": "true"
+              },
+              {
+                "Name": "AES256-SHA256",
+                "Value": "true"
+              },
+              {
+                "Name": "AES256-SHA",
+                "Value": "true"
+              },
+              {
+                "Name": "DHE-DSS-AES128-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "CAMELLIA128-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EDH-RSA-DES-CBC3-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DES-CBC3-SHA",
+                "Value": "true"
+              },
+              {
+                "Name": "ECDHE-RSA-RC4-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "RC4-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "ECDHE-ECDSA-RC4-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-DSS-AES256-GCM-SHA384",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-RSA-AES256-GCM-SHA384",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-RSA-AES256-SHA256",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-DSS-AES256-SHA256",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-RSA-AES256-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-DSS-AES256-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-RSA-CAMELLIA256-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-DSS-CAMELLIA256-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "CAMELLIA256-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EDH-DSS-DES-CBC3-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-DSS-AES128-GCM-SHA256",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-RSA-AES128-GCM-SHA256",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-RSA-AES128-SHA256",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-DSS-AES128-SHA256",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-RSA-CAMELLIA128-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-DSS-CAMELLIA128-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-AES128-GCM-SHA256",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-AES128-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-AES128-SHA256",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-AES256-GCM-SHA384",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-AES256-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-AES256-SHA256",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-CAMELLIA128-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-CAMELLIA256-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-DES-CBC3-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-RC4-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "ADH-SEED-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-DSS-SEED-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DHE-RSA-SEED-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EDH-DSS-DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EDH-RSA-DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "IDEA-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "RC4-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "SEED-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "DES-CBC3-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "DES-CBC-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "RC2-CBC-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "PSK-AES256-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "PSK-3DES-EDE-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "KRB5-DES-CBC3-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "KRB5-DES-CBC3-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "PSK-AES128-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "PSK-RC4-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "KRB5-RC4-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "KRB5-RC4-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "KRB5-DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "KRB5-DES-CBC-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-EDH-RSA-DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-EDH-DSS-DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-ADH-DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-RC2-CBC-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-KRB5-RC2-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-KRB5-DES-CBC-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-KRB5-RC2-CBC-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-KRB5-DES-CBC-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-ADH-RC4-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-RC4-MD5",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-KRB5-RC4-SHA",
+                "Value": "false"
+              },
+              {
+                "Name": "EXP-KRB5-RC4-MD5",
+                "Value": "false"
+              }
+            ]
+          }
+        ]
+      },
+      "Metadata": {
+        "AWS::CloudFormation::Designer": {
+          "id": "a36655db-3da0-4e0d-9fd7-e1ed94152923"
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "ELBDNS": {
+      "Value": {
+        "Fn::GetAtt": [
+          "ElasticLoadBalancer",
+          "DNSName"
+        ]
+      }
+    },
+    "ELBName": {
+      "Value": {
+        "Ref": "ElasticLoadBalancer"
+      }
+    }
+  },
+  "Metadata": {
+    "AWS::CloudFormation::Designer": {
+      "2171c201-098f-4f1e-acaa-8794388c9a3f": {
+        "size": {
+          "width": 60,
+          "height": 60
+        },
+        "position": {
+          "x": 60,
+          "y": 90
+        },
+        "z": 1,
+        "embeds": []
+      },
+      "a36655db-3da0-4e0d-9fd7-e1ed94152923": {
+        "size": {
+          "width": 60,
+          "height": 60
+        },
+        "position": {
+          "x": 180,
+          "y": 90
+        },
+        "z": 1,
+        "embeds": [],
+        "ismemberof": [
+          "2171c201-098f-4f1e-acaa-8794388c9a3f"
+        ]
+      },
+      "9c72ea7a-4484-4c2a-b142-25c506e4f00b": {
+        "size": {
+          "width": 60,
+          "height": 60
+        },
+        "position": {
+          "x": 60,
+          "y": 210
+        },
+        "z": 1,
+        "embeds": []
+      },
+      "828eb083-015e-4f0b-8203-72763b5d70a0": {
+        "size": {
+          "width": 60,
+          "height": 60
+        },
+        "position": {
+          "x": 180,
+          "y": 210
+        },
+        "z": 1,
+        "embeds": [],
+        "isconnectedto": [
+          "a36655db-3da0-4e0d-9fd7-e1ed94152923"
+        ],
+        "isassociatedwith": [
+          "9c72ea7a-4484-4c2a-b142-25c506e4f00b"
+        ]
+      }
+    }
+  }
+}
