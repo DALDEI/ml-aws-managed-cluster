@@ -1,11 +1,11 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "Create a single az, load balanced, MarkLogic System. MarkLogic-7.0-1.x86_64.rpm",
+  "Description":"Create a cluster with three node or more nodes, multi az, load balanced, MarkLogic Cluster. MarkLogic-8.0-4.x86_64.rpm",
   "Parameters": {
     "AMI": {
-      "Description": "Base AMI of MarkLogic installation. Default is us-west-2",
+      "Description": "Base AMI of MarkLogic installation - Default is us-west-2, ami-6f405d0e",
       "Type": "String",
-      "Default": "ami-9c7b9eaf"
+      "Default": "ami-6f405d0e"
     },
     "AdminUser": {
       "Description": "The MarkLogic Administrator Username",
@@ -149,9 +149,22 @@
         "VolumeType": {"Ref": "VolumeType"}
       }
     },
-    "MarkLogicSDBDomain": {
-      "Type": "AWS::SDB::Domain",
-      "Properties": {"Description": "Simple DB auto-created and used as cluster name"}
+     "MarkLogicDDBTable" : {
+      "Type" : "AWS::DynamoDB::Table",
+      "Properties" : {
+        "AttributeDefinitions" : [ {
+          "AttributeName" : "node",
+          "AttributeType" : "S"
+        } ],
+        "KeySchema" : [ {
+          "KeyType" : "HASH",
+          "AttributeName" : "node"
+        } ],
+        "ProvisionedThroughput" : {
+          "WriteCapacityUnits" : 5,
+          "ReadCapacityUnits" : 5
+        }
+      }
     },
     "ZoneAutoScalingGroup1": {
       "Type": "AWS::AutoScaling::AutoScalingGroup",
@@ -220,7 +233,7 @@
                 "",
                 [
                   "export MARKLOGIC_CLUSTER_NAME=",
-                  {"Ref": "MarkLogicSDBDomain"},
+                  {"Ref": "MarkLogicDDBTable"},
                   "\n",
                   "export MARKLOGIC_EBS_VOLUME=",
                   {"Ref": "MarklogicVolume1"},
@@ -464,7 +477,7 @@
                 "",
                 [
                   "export MARKLOGIC_CLUSTER_NAME=",
-                  {"Ref": "MarkLogicSDBDomain"},
+                  {"Ref": "MarkLogicDDBTable"},
                   "\n",
                   "export MARKLOGIC_EBS_VOLUME=",
                   {"Ref": "MarklogicVolume3"},
@@ -786,5 +799,13 @@
         ":8001"
       ]
     ]}
-  }}
+  }
+  ,
+    "DymamoDB" : {
+      "Description" : "The DynamoDB Table",
+      "Value" : {
+        "Ref" : "MarkLogicDDBTable"
+      }
+    }
+  }
 }

@@ -19,7 +19,7 @@
      {
       "Description":"The ML VPC Template S3 URL",
       "Type":"String",
-      "Default": "http://ml-aws-managed-cluster.s3.amazonaws.com/cloudformation/ml-v7/aws-ml3zone-private-v7.template"
+      "Default": "http://ml-aws-managed-cluster.s3.amazonaws.com/cloudformation/ml-v8/aws-ml3zone-private-v8.template"
      },
     "AdminUser":
      {
