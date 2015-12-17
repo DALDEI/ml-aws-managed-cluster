@@ -50,8 +50,15 @@ subprojects {
     }
 }
 
-
-
+task sync {
+  description="TODO: Sync to S3"
+  group= 'build'
+  doLast {
+    println "TODO: sync dependant templates for public access"
+    println "cd vpc/src/main"
+    println "aws s3 sync  . s3://ml-aws-managed-cluster  --delete"
+  }
+}
 
 
 task build()  {
