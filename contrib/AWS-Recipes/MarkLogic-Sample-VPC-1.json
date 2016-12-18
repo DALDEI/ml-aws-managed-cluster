@@ -1,0 +1,667 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	"Description": "Sample VPN",
+	"Metadata": {
+		"AWS::CloudFormation::Interface":{
+			"ParameterGroups": [
+			{
+				"Label": {
+					"default": "Sample VPC Parameters"
+				},
+				"Parameters": [
+					"pVpcName", 
+					"pVpcCidr",
+					"pVpcSourceCidr", 					
+					"pAvailabilityZone1", 										
+					"pAvailabilityZone2", 					
+					"pAvailabilityZone3", 										
+					"pExternalSubnetAZ1Cidr", 
+					"pExternalSubnetAZ2Cidr",
+					"pExternalSubnetAZ3Cidr",
+					"pInternalSubnetAZ1Cidr", 
+					"pInternalSubnetAZ2Cidr", 
+					"pInternalSubnetAZ3Cidr",
+					"pPrivateKeyPair"
+				]
+			},
+			{
+				"Label": {
+					"default": "Other Parameters"
+				},
+				"Parameters": [
+					"pResourceTagName",
+					"pResourceTagValue"
+				]
+			}],			
+			"ParameterLabels": {
+				"pVpcName": {"default": "VPC Name"},
+				"pVpcCidr": {"default": "VPC CIDR"},
+				"pVpcSourceCidr": {"default": "VPC Source CIDR range"},				
+				"pAvailabilityZone1": {"default": "First Availability Zone"},
+				"pAvailabilityZone2": {"default": "Second Availability Zone"},				
+				"pAvailabilityZone3": {"default": "Third Availability Zone"},								
+				"pExternalSubnetAZ1Cidr": {"default": "First Availability Zone External Subnet"},
+				"pExternalSubnetAZ2Cidr": {"default": "Second Availability Zone External Subnet"},
+				"pExternalSubnetAZ3Cidr": {"default": "Third Availability Zone External Subnet"},
+				"pInternalSubnetAZ1Cidr": {"default": "First Availability Zone Internal Subnet"},
+				"pInternalSubnetAZ2Cidr": {"default": "Second Availability Zone Internal Subnet"},
+				"pInternalSubnetAZ3Cidr": {"default": "Third Availability Zone Internal Subnet"},
+				"pPrivateKeyPair":{"default":"Private Key Pair"},
+
+				"pResourceTagName": {"default": "Environment"},
+				"pResourceTagValue": {"default": "Environment value"}				
+			}			
+		},
+		"Stack": {"Value": "0"},
+		"VersionDate": {"Value": "20161205"},
+		"Identifier": {"Value": "Sample VPN"},
+		"Input": {"Description": "Input of all required parameters"},
+		"Output": {"Description": "N/A"}		
+	},
+	"Parameters":{
+		"pVpcName": {
+			"Description": "VPC Name",
+			"Type": "String",
+			"Default": "Sample-VPC"
+		},
+		"pVpcCidr": {
+			"Description": "VPC CIDR Range",
+			"Type": "String",
+			"Default": "10.1.0.0/16"
+		},
+		"pVpcSourceCidr": {
+			"Description": "Allows connectivity to VPC resources from this CIDR range",
+			"Type": "String",
+			"Default": "0.0.0.0/0"
+		},		
+		"pAvailabilityZone1": {
+			"Description": "First Availability Zone",
+			"Type": "AWS::EC2::AvailabilityZone::Name",
+			"Default":"us-east-1a"
+		},
+		"pAvailabilityZone2": {
+			"Description": "Second Availability Zone",
+			"Type": "AWS::EC2::AvailabilityZone::Name",
+			"Default":"us-east-1b"			
+		},
+		"pAvailabilityZone3": {
+			"Description": "Third Availability Zone",
+			"Type": "AWS::EC2::AvailabilityZone::Name",
+			"Default":"us-east-1d"			
+		},
+		"pExternalSubnetAZ1Cidr": {
+			"Description": "External subnet CIDR range for First Availability Zone",
+			"Type": "String",
+			"Default": "10.1.16.0/20"
+		},
+		"pExternalSubnetAZ2Cidr": {
+			"Description": "External subnet CIDR range for Second Availability Zone",
+			"Type": "String",
+			"Default": "10.1.32.0/20"
+		},
+		"pExternalSubnetAZ3Cidr": {
+			"Description": "External subnet CIDR range for Third Availability Zone",
+			"Type": "String",
+			"Default": "10.1.48.0/20"
+		},
+		"pInternalSubnetAZ1Cidr": {
+			"Description": "Internal subnet CIDR range for First Availability Zone",
+			"Type": "String",
+			"Default": "10.1.64.0/20"
+		},
+		"pInternalSubnetAZ2Cidr": {
+			"Description": "Internal subnet CIDR range for Second Availability Zone",
+			"Type": "String",
+			"Default": "10.1.128.0/20"
+		},
+		"pInternalSubnetAZ3Cidr": {
+			"Description": "Internal subnet CIDR range for Third Availability Zone",
+			"Type": "String",
+			"Default": "10.1.192.0/20"
+		},
+		"pPrivateKeyPair": {
+			"Description": "Private Key Pair",
+			"Type": "AWS::EC2::KeyPair::KeyName"
+		},
+		"pResourceTagName": {
+			"Description": "Name of tag used for resources",
+			"Type": "String",
+			"Default": "Environment"
+		},
+		"pResourceTagValue": {
+			"Description": "Value of tag used for resources",
+			"Type": "String",
+			"Default": "Development"
+		}
+
+	},
+	"Mappings" :{
+		"AMI" : {
+			"us-east-1":{"AWSLinux":"ami-b73b63a0","Windows2012Base":"ami-bfeddca8"},
+			"us-east-2":{"AWSLinux":"ami-58277d3d","Windows2012Base":"ami-e999c38c"},
+			"us-west-1":{"AWSLinux":"ami-23e8a343","Windows2012Base":"ami-8b590deb"},
+			"us-west-2":{"AWSLinux":"ami-5ec1673e","Windows2012Base":"ami-24e64944"},
+			"eu-west-1":{"AWSLinux":"ami-9398d3e0","Windows2012Base":"ami-95d984e6"},
+			"eu-west-2":{"AWSLinux":"ami-f9619996","Windows2012Base":"ami-21cb0f4e"},
+			"ap-northeast-1":{"AWSLinux":"ami-0c11b26d","Windows2012Base":"ami-5b299d3a"},
+			"ap-northeast-2":{"AWSLinux":"ami-983ce8f6","Windows2012Base":"ami-69d30407"},
+			"ap-southeast-1":{"AWSLinux":"ami-b953f2da","Windows2012Base":"ami-9d7ad8fe"},
+			"ap-southeast-2":{"AWSLinux":"ami-db704cb8","Windows2012Base":"ami-9fe7d9fc"},
+			"ap-south-1":{"AWSLinux":"ami-34b4c05b","Windows2012Base":"ami-79255216"},
+			"sa-east-1":{"AWSLinux":"ami-97831ffb","Windows2012Base":"ami-628e100e"}
+		}
+	},
+	"Resources": {
+		"VPC": {
+			"Type": "AWS::EC2::VPC",
+			"Properties": {
+				"CidrBlock": {"Ref": "pVpcCidr"},
+				"InstanceTenancy": "default",
+				"EnableDnsSupport": "true",              
+				"EnableDnsHostnames": "true",
+				"Tags": [
+					{"Key": "Name", "Value": {"Ref": "pVpcName"}},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rInternetGateway": {
+			"Type": "AWS::EC2::InternetGateway",
+			"Properties": {
+				"Tags": [ {"Key": "Name", "Value": "Internet Gateway"} ]
+			}
+		},
+		"rInternetGatewayAttachment": {
+			"Type": "AWS::EC2::VPCGatewayAttachment",
+			"DependsOn": "rInternetGateway",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"InternetGatewayId": {"Ref": "rInternetGateway"}
+			}
+		},
+		"rExternalSubnetAZ1": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"CidrBlock": {"Ref": "pExternalSubnetAZ1Cidr"},
+				"AvailabilityZone": {"Ref": "pAvailabilityZone1"},
+				"MapPublicIpOnLaunch": "True",
+				"Tags": [ 
+					{"Key": "Name", "Value": "External Subnet AZ1"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rExternalSubnetAZ2": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"CidrBlock": {"Ref": "pExternalSubnetAZ2Cidr"},
+				"AvailabilityZone": {"Ref": "pAvailabilityZone2"},
+				"MapPublicIpOnLaunch": "True",
+				"Tags": [ 
+					{"Key": "Name", "Value": "External Subnet AZ2"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rExternalSubnetAZ3": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"CidrBlock": {"Ref": "pExternalSubnetAZ3Cidr"},
+				"AvailabilityZone": {"Ref": "pAvailabilityZone3"},
+				"MapPublicIpOnLaunch": "True",
+				"Tags": [ 
+					{"Key": "Name", "Value": "External Subnet AZ3"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rInternalSubnetAZ1": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"CidrBlock": {"Ref": "pInternalSubnetAZ1Cidr"},
+				"AvailabilityZone": {"Ref": "pAvailabilityZone1"},
+				"MapPublicIpOnLaunch": "False",
+				"Tags": [ 
+					{"Key": "Name", "Value": "Internal Subnet AZ1"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rInternalSubnetAZ2": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"CidrBlock": {"Ref": "pInternalSubnetAZ2Cidr"},
+				"AvailabilityZone": {"Ref": "pAvailabilityZone2"},
+				"MapPublicIpOnLaunch": "False",
+				"Tags": [ 
+					{"Key": "Name", "Value": "Internal Subnet AZ2"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rInternalSubnetAZ3": {
+			"Type": "AWS::EC2::Subnet",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"CidrBlock": {"Ref": "pInternalSubnetAZ3Cidr"},
+				"AvailabilityZone": {"Ref": "pAvailabilityZone3"},
+				"MapPublicIpOnLaunch": "False",
+				"Tags": [ 
+					{"Key": "Name", "Value": "Internal Subnet AZ3"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rExternalRoutingTableAZ1": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [ 
+					{"Key": "Name", "Value": "External Routing Table AZ1"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rExternalRoutingTableAZ2": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [ 
+					{"Key": "Name", "Value": "External Routing Table AZ2"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rExternalRoutingTableAZ3": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [ 
+					{"Key": "Name", "Value": "External Routing Table AZ3"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rExternalRoutingTableRouteAZ1": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"RouteTableId": {"Ref": "rExternalRoutingTableAZ1"},
+				"GatewayId": {"Ref": "rInternetGateway"}
+			}
+		},		
+		"rExternalRoutingTableRouteAZ2": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"RouteTableId": {"Ref": "rExternalRoutingTableAZ2"},
+				"GatewayId": {"Ref": "rInternetGateway"}
+			}
+		},		
+		"rExternalRoutingTableRouteAZ3": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"RouteTableId": {"Ref": "rExternalRoutingTableAZ3"},
+				"GatewayId": {"Ref": "rInternetGateway"}
+			}
+		},
+		"rExternalSubnetAZ1RouteTableAssociation": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rExternalSubnetAZ1"},
+				"RouteTableId": {"Ref": "rExternalRoutingTableAZ1"}
+			}
+		},
+		"rExternalSubnetAZ2RouteTableAssociation": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rExternalSubnetAZ2"},
+				"RouteTableId": {"Ref": "rExternalRoutingTableAZ2"}
+			}
+		},
+		"rExternalSubnetAZ3RouteTableAssociation": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rExternalSubnetAZ3"},
+				"RouteTableId": {"Ref": "rExternalRoutingTableAZ3"}
+			}
+		},
+		"rInternalRoutingTableAZ1": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [ 
+					{"Key": "Name", "Value": "Internal Routing Table AZ1"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rInternalRoutingTableAZ2": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [ 
+					{"Key": "Name", "Value": "Internal Routing Table AZ2"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rInternalRoutingTableAZ3": {
+			"Type": "AWS::EC2::RouteTable",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [ 
+					{"Key": "Name", "Value": "Internal Routing Table AZ3"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				]
+			}
+		},
+		"rInternalRoutingTableRouteAZ1": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"RouteTableId": {"Ref": "rInternalRoutingTableAZ1"},
+				"NatGatewayId": {"Ref": "rNatGatewayAZ1"}
+			}
+		},		
+		"rInternalRoutingTableRouteAZ2": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"RouteTableId": {"Ref": "rInternalRoutingTableAZ2"},
+				"NatGatewayId": {"Ref": "rNatGatewayAZ2"}
+			}
+		},
+		"rInternalRoutingTableRouteAZ3": {
+			"Type": "AWS::EC2::Route",
+			"Properties": {
+				"DestinationCidrBlock": "0.0.0.0/0",
+				"RouteTableId": {"Ref": "rInternalRoutingTableAZ3"},
+				"NatGatewayId": {"Ref": "rNatGatewayAZ3"}
+			}
+		},
+		"rInternalSubnetAZ1RouteTableAssociation": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rInternalSubnetAZ1"},
+				"RouteTableId": {"Ref": "rInternalRoutingTableAZ1"}
+			}
+		},
+		"rInternalSubnetAZ2RouteTableAssociation": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rInternalSubnetAZ2"},
+				"RouteTableId": {"Ref": "rInternalRoutingTableAZ2"}
+			}
+		},
+		"rInternalSubnetAZ3RouteTableAssociation": {
+			"Type": "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rInternalSubnetAZ3"},
+				"RouteTableId": {"Ref": "rInternalRoutingTableAZ3"}
+			}
+		},
+		"rEipNatGatewayAZ1": {
+			"Type": "AWS::EC2::EIP",
+			"DependsOn": "rInternetGatewayAttachment",
+			"Properties": {
+				"Domain": "vpc"
+			}
+		},
+		"rEipNatGatewayAZ2": {
+			"Type": "AWS::EC2::EIP",
+			"DependsOn": "rInternetGatewayAttachment",
+			"Properties": {
+				"Domain": "vpc"
+			}
+		},
+		"rEipNatGatewayAZ3": {
+			"Type": "AWS::EC2::EIP",
+			"DependsOn": "rInternetGatewayAttachment",
+			"Properties": {
+				"Domain": "vpc"
+			}
+		},
+		"rNatGatewayAZ1": {
+			"Type": "AWS::EC2::NatGateway",
+			"Properties": {
+				"AllocationId": {"Fn::GetAtt": ["rEipNatGatewayAZ1", "AllocationId"]},
+				"SubnetId": {"Ref": "rExternalSubnetAZ1"}
+			}
+		},		
+		"rNatGatewayAZ2": {
+			"Type": "AWS::EC2::NatGateway",
+			"Properties": {
+				"AllocationId": {"Fn::GetAtt": ["rEipNatGatewayAZ2", "AllocationId"]},
+				"SubnetId": {"Ref": "rExternalSubnetAZ2"}
+			}
+		},
+		"rNatGatewayAZ3": {
+			"Type": "AWS::EC2::NatGateway",
+			"Properties": {
+				"AllocationId": {"Fn::GetAtt": ["rEipNatGatewayAZ3", "AllocationId"]},
+				"SubnetId": {"Ref": "rExternalSubnetAZ3"}
+			}
+		},
+		"rExternalSubnetAcl": {
+			"Type": "AWS::EC2::NetworkAcl",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [ {"Key": "Name", "Value": "External Network ACL"} ]
+			}
+		},
+		"rInternalSubnetAcl": {
+			"Type": "AWS::EC2::NetworkAcl",
+			"Properties": {
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [ {"Key": "Name", "Value": "Internal Network ACL"} ]
+			}
+		},
+		"rExternalInSubnetAclEntry": {
+			"Type": "AWS::EC2::NetworkAclEntry",
+			"Properties": {
+				"NetworkAclId": {"Ref": "rExternalSubnetAcl"},
+				"RuleNumber": "100",
+				"Protocol": "-1",
+				"RuleAction": "allow",
+				"Egress": "false",
+				"CidrBlock": "0.0.0.0/0",
+				"Icmp": {"Code": "-1", "Type": "-1"},
+				"PortRange": {"From": "1", "To": "65535"}
+			}
+		},
+		"rExternalOutSubnetAclEntry": {
+			"Type": "AWS::EC2::NetworkAclEntry",
+			"Properties": {
+				"NetworkAclId": {"Ref": "rExternalSubnetAcl"},
+				"RuleNumber": "100",
+				"Protocol": "-1",
+				"RuleAction": "allow",
+				"Egress": "true",
+				"CidrBlock": "0.0.0.0/0",
+				"Icmp": {"Code": "-1", "Type": "-1"},
+				"PortRange": {"From": "1", "To": "65535"}
+			}
+		},
+		"rInternalInSubnetAclEntry": {
+			"Type": "AWS::EC2::NetworkAclEntry",
+			"Properties": {
+				"NetworkAclId": {"Ref": "rInternalSubnetAcl"},
+				"RuleNumber": "100",
+				"Protocol": "-1",
+				"RuleAction": "allow",
+				"Egress": "false",
+				"CidrBlock": "0.0.0.0/0",
+				"Icmp": {"Code": "-1", "Type": "-1"},
+				"PortRange": {"From": "1", "To": "65535"}
+			}
+		},
+		"rInternalOutSubnetAclEntry": {
+			"Type": "AWS::EC2::NetworkAclEntry",
+			"Properties": {
+				"NetworkAclId": {"Ref": "rInternalSubnetAcl"},
+				"RuleNumber": "100",
+				"Protocol": "-1",
+				"RuleAction": "allow",
+				"Egress": "true",
+				"CidrBlock": "0.0.0.0/0",
+				"Icmp": {"Code": "-1", "Type": "-1"},
+				"PortRange": {"From": "1", "To": "65535"}
+			}
+		},
+		"rExternalSubnetAZ1AclAssociation": {
+			"Type": "AWS::EC2::SubnetNetworkAclAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rExternalSubnetAZ1"},
+				"NetworkAclId": {"Ref": "rExternalSubnetAcl"}
+			}
+		},
+		"rExternalSubnetAZ2AclAssociation": {
+			"Type": "AWS::EC2::SubnetNetworkAclAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rExternalSubnetAZ2"},
+				"NetworkAclId": {"Ref": "rExternalSubnetAcl"}
+			}
+		},
+		"rExternalSubnetAZ3AclAssociation": {
+			"Type": "AWS::EC2::SubnetNetworkAclAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rExternalSubnetAZ3"},
+				"NetworkAclId": {"Ref": "rExternalSubnetAcl"}
+			}
+		},		
+		"rInternalSubnetAZ1AclAssociation": {
+			"Type": "AWS::EC2::SubnetNetworkAclAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rInternalSubnetAZ1"},
+				"NetworkAclId": {"Ref": "rInternalSubnetAcl"}
+			}
+		},
+		"rInternalSubnetAZ2AclAssociation": {
+			"Type": "AWS::EC2::SubnetNetworkAclAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rInternalSubnetAZ2"},
+				"NetworkAclId": {"Ref": "rInternalSubnetAcl"}
+			}
+		},
+		"rInternalSubnetAZ3AclAssociation": {
+			"Type": "AWS::EC2::SubnetNetworkAclAssociation",
+			"Properties": {
+				"SubnetId": {"Ref": "rInternalSubnetAZ3"},
+				"NetworkAclId": {"Ref": "rInternalSubnetAcl"}
+			}
+		},
+		"rMgmtSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Mgmt Security Group",
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [ 
+					{"Key": "Name", "Value": "Mgmt Security Group"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				],
+				"SecurityGroupIngress": [ 
+					{"IpProtocol": "tcp", "FromPort": "22", "ToPort": "22", "CidrIp": {"Ref": "pVpcSourceCidr"}},
+					{"IpProtocol": "tcp", "FromPort": "3389", "ToPort": "3389", "CidrIp": {"Ref": "pVpcSourceCidr"}}					
+				]
+			}
+		},
+		"rExternalSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "External Security Group",
+				"VpcId": {"Ref": "VPC"},		
+				"Tags": [ 
+					{"Key": "Name", "Value": "External Security Group"} ,
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				],
+				"SecurityGroupIngress": [ 
+					{"IpProtocol": "tcp", "FromPort": "80", "ToPort": "80", "CidrIp": "0.0.0.0/0"},
+					{"IpProtocol": "tcp", "FromPort": "443", "ToPort": "443", "CidrIp": "0.0.0.0/0"}
+				]
+			}
+		},
+		"rWebSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Web Server Security Group",
+				"VpcId": {"Ref": "VPC"},		
+				"Tags": [
+					{"Key": "Name", "Value": "Web Security Group"},
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				],
+				"SecurityGroupIngress": [ 
+					{"IpProtocol": "tcp", "FromPort": "22", "ToPort": "22", "SourceSecurityGroupId": {"Ref": "rMgmtSecurityGroup"}},
+					{"IpProtocol": "tcp", "FromPort": "80", "ToPort": "80", "SourceSecurityGroupId": {"Ref": "rExternalSecurityGroup"}},
+					{"IpProtocol": "tcp", "FromPort": "443", "ToPort": "443", "SourceSecurityGroupId": {"Ref": "rExternalSecurityGroup"}}
+				],
+				"SecurityGroupEgress": [ 
+					{"IpProtocol": "tcp", "FromPort": "80", "ToPort": "80", "CidrIp": "0.0.0.0/0"},
+					{"IpProtocol": "tcp", "FromPort": "443", "ToPort": "443", "CidrIp": "0.0.0.0/0"}
+				]
+			}
+		},		
+		"rInternalSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"GroupDescription": "Internal Security Group",
+				"VpcId": {"Ref": "VPC"},
+				"Tags": [
+					{"Key": "Name", "Value": "Internal Security Group"},	
+					{"Key": {"Ref": "pResourceTagName"}, "Value": {"Ref": "pResourceTagValue"}}
+				],
+				"SecurityGroupIngress": [ 
+					{"IpProtocol": "tcp", "FromPort": "22", "ToPort": "22", "SourceSecurityGroupId": {"Ref": "rMgmtSecurityGroup"}},
+					{"IpProtocol": "-1", "FromPort": "1", "ToPort": "65535", "SourceSecurityGroupId": {"Ref": "rWebSecurityGroup"}}
+				]
+			}
+		},
+		"LinuxJumpBox":{
+			"Type" : "AWS::EC2::Instance",
+			"Properties" : {
+				"ImageId" : {
+          "Fn::FindInMap": ["AMI",{"Ref": "AWS::Region"},"AWSLinux"]
+         },
+				"InstanceType" : "t2.small",
+				"KeyName" : {"Ref":"pPrivateKeyPair"},
+        "SecurityGroupIds": [{"Ref" : "rMgmtSecurityGroup"}],
+				"SubnetId" : {"Ref":"rExternalSubnetAZ1"},
+				"Tags": [
+					{"Key": "Name", "Value": "LinuxJumpBox"}
+				]				
+			}
+		},
+		"WindowsJumpBox":{
+			"Type" : "AWS::EC2::Instance",
+			"Properties" : {
+				"ImageId" : {
+          "Fn::FindInMap": ["AMI",{"Ref": "AWS::Region"},"Windows2012Base"]
+         },
+				"InstanceType" : "t2.small",
+				"KeyName" : {"Ref":"pPrivateKeyPair"},
+        "SecurityGroupIds": [{"Ref" : "rMgmtSecurityGroup"},{"Ref" : "rWebSecurityGroup"}],
+				"SubnetId" : {"Ref":"rExternalSubnetAZ1"},
+				"Tags": [
+					{"Key": "Name", "Value": "WindowsJumpBox"}
+				]
+
+			}
+		}		
+	},
+  "Outputs": {
+    "LinuxJumpBoxIP": {
+      "Description": "The IP of the Linux Jump Box",
+      "Value": {"Fn::GetAtt": ["LinuxJumpBox","PublicIp"]}
+    },
+    "WindowsJumpBoxIP": {
+      "Description": "The IP of the Windows Jump Box",
+      "Value": {"Fn::GetAtt": ["WindowsJumpBox","PublicIp"]}
+    }    
+  }
+}
